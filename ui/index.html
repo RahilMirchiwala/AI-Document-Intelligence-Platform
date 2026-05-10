@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Document Intelligence</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', sans-serif; background: #f0f4f8; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 30px 20px; }
+  .header { text-align: center; margin-bottom: 28px; }
+  .header h1 { font-size: 28px; font-weight: 700; color: #1a3a5c; }
+  .header p { font-size: 14px; color: #777; margin-top: 6px; }
+  .main { width: 100%; max-width: 800px; display: flex; flex-direction: column; gap: 20px; }
+  .card { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.07); }
+  .card h2 { font-size: 15px; font-weight: 600; color: #333; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid #f0f4f8; }
+  textarea { width: 100%; height: 180px; padding: 12px; border: 1.5px solid #e0e0e0; border-radius: 10px; font-size: 14px; font-family: inherit; resize: vertical; outline: none; color: #333; line-height: 1.6; background: #fafafa; }
+  textarea:focus { border-color: #1a3a5c; background: white; }
+  .samples { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .sample-btn { font-size: 12px; padding: 5px 12px; border-radius: 20px; border: 1.5px solid #e0e0e0; background: white; color: #555; cursor: pointer; transition: all 0.15s; }
+  .sample-btn:hover { border-color: #1a3a5c; color: #1a3a5c; }
+  .analyze-btn { width: 100%; padding: 13px; font-size: 15px; font-weight: 600; border: none; border-radius: 10px; background: #1a3a5c; color: white; cursor: pointer; margin-top: 14px; transition: all 0.15s; }
+  .analyze-btn:hover { background: #2557a7; }
+  .analyze-btn:disabled { background: #aaa; cursor: not-allowed; }
+  .result { display: none; }
+  .category-badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: 30px; font-size: 14px; font-weight: 700; margin-bottom: 16px; }
+  .badge-medical { background: #E8F5E9; color: #1B5E20; }
+  .badge-legal { background: #E3F2FD; color: #0D47A1; }
+  .badge-financial { background: #FFF8E1; color: #E65100; }
+  .entities-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .entity-item { background: #f8fafc; border-radius: 8px; padding: 10px 14px; }
+  .entity-label { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .entity-value { font-size: 13px; color: #333; line-height: 1.5; }
+  .entity-value.empty { color: #bbb; font-style: italic; }
+  .summary-box { background: #f8fafc; border-left: 4px solid #1a3a5c; border-radius: 0 8px 8px 0; padding: 16px; font-size: 14px; line-height: 1.8; color: #333; white-space: pre-wrap; }
+  .loading { text-align: center; padding: 30px; display: none; }
+  .loading p { color: #888; font-size: 14px; margin-top: 10px; }
+  .dots { display: flex; justify-content: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #1a3a5c; animation: bounce 1.2s infinite; }
+  .dot:nth-child(2) { animation-delay: 0.2s; }
+  .dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-8px); } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>AI Document Intelligence Platform</h1>
+  <p>Classify documents, extract entities, and generate AI summaries</p>
+</div>
+
+<div class="main">
+
+  <!-- Input -->
+  <div class="card">
+    <h2>Document Input</h2>
+    <textarea id="docText" placeholder="Paste your document text here..."></textarea>
+    <div class="samples">
+      <button class="sample-btn" onclick="loadSample('medical')">Medical Report</button>
+      <button class="sample-btn" onclick="loadSample('legal')">Legal Agreement</button>
+      <button class="sample-btn" onclick="loadSample('financial')">Financial Statement</button>
+    </div>
+    <button class="analyze-btn" onclick="analyze()" id="btn">Analyze Document</button>
+  </div>
+
+  <!-- Loading -->
+  <div class="loading" id="loading">
+    <div class="dots">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+    <p>Analyzing document...</p>
+  </div>
+
+  <!-- Result -->
+  <div class="card result" id="result">
+    <h2>Analysis Result</h2>
+    <div id="badge"></div>
+    <div class="entities-grid" id="entities"></div>
+  </div>
+
+  <div class="card result" id="summaryCard">
+    <h2>AI Summary</h2>
+    <div class="summary-box" id="summary"></div>
+  </div>
+
+</div>
+
+<script>
+const API = "http://127.0.0.1:8000/analyze";
+
+const samples = {
+  medical: `PREOPERATIVE DIAGNOSIS: Chest pain and possible coronary artery disease.
+The patient is a 58-year-old male with complaints of intermittent chest pain radiating to the left arm for the past 2 weeks.
+PAST MEDICAL HISTORY: Hypertension, diabetes mellitus type 2.
+PHYSICAL EXAMINATION: Blood pressure 148/92. Heart sounds regular.
+ASSESSMENT: Likely angina secondary to coronary artery disease.
+PLAN: Recommend stress test, ECG, and cardiology consultation. Prescribe aspirin and metformin.`,
+
+  legal: `THIS SERVICE AGREEMENT is entered into effective April 10, 2026 by and between Nexa Solutions Pvt Ltd and Daniel Roberts.
+The parties hereby agree to the terms and conditions set forth in this contract.
+COMPENSATION: Client agrees to pay a total amount of $120,000 payable in monthly installments.
+CONFIDENTIALITY: All proprietary information shall remain protected.
+TERMINATION: Either party may terminate with thirty days written notice.
+JURISDICTION: This agreement shall be governed by laws of State of California.`,
+
+  financial: `QUARTERLY FINANCIAL STATEMENT - Q1 2026
+Company: TechVentures Global Inc.
+Total revenue for Q1 2026 was reported at $6.2 million representing a growth of 14%.
+Operating expenses increased to $2.1 million due to infrastructure investments.
+Net income after taxes amounted to $1.4 million.
+Reported from New York headquarters on April 15, 2026.`
+};
+
+function loadSample(type) {
+  document.getElementById("docText").value = samples[type];
+}
+
+function getBadgeClass(category) {
+  if (category === "Medical") return "badge-medical";
+  if (category === "Legal") return "badge-legal";
+  return "badge-financial";
+}
+
+function getEmoji(category) {
+  if (category === "Medical") return "🏥";
+  if (category === "Legal") return "⚖️";
+  return "📈";
+}
+
+function renderEntities(entities) {
+  const container = document.getElementById("entities");
+  container.innerHTML = "";
+  for (const [key, value] of Object.entries(entities)) {
+    const label = key.replace(/_/g, " ").toUpperCase();
+    const val = Array.isArray(value) && value.length > 0
+      ? value.join(", ")
+      : null;
+    container.innerHTML += `
+      <div class="entity-item">
+        <div class="entity-label">${label}</div>
+        <div class="entity-value ${val ? '' : 'empty'}">${val || 'Not found'}</div>
+      </div>`;
+  }
+}
+
+async function analyze() {
+  const text = document.getElementById("docText").value.trim();
+  if (!text) { alert("Please enter document text!"); return; }
+
+  const btn = document.getElementById("btn");
+  const loading = document.getElementById("loading");
+  const result = document.getElementById("result");
+  const summaryCard = document.getElementById("summaryCard");
+
+  btn.disabled = true;
+  loading.style.display = "block";
+  result.style.display = "none";
+  summaryCard.style.display = "none";
+
+  try {
+    const res = await fetch(API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text })
+    });
+    const data = await res.json();
+
+    // Badge
+    document.getElementById("badge").innerHTML = `
+      <span class="category-badge ${getBadgeClass(data.category)}">
+        ${getEmoji(data.category)} ${data.category} Document
+      </span>`;
+
+    // Entities
+    renderEntities(data.entities);
+
+    // Summary
+    document.getElementById("summary").textContent = data.summary.replace(/\*\*/g, "");
+
+    result.style.display = "block";
+    summaryCard.style.display = "block";
+
+  } catch (err) {
+    alert("Could not connect to API. Make sure server is running on port 8000.");
+  }
+
+  btn.disabled = false;
+  loading.style.display = "none";
+}
+</script>
+</body>
+</html>
