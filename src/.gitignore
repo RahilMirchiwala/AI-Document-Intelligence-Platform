@@ -3,4 +3,6 @@ __pycache__/
 *.pyc
 .venv/
 data/
-notebooks/
+*.csv
+*.jsonl
+src/.env
